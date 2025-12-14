@@ -1,0 +1,68 @@
+# .github/workflows/generate_video.yml
+name: Generate Quran Video
+
+# تحديد المحفز: يتم التشغيل عندما يتلقى رابط API طلب HTTP
+on:
+  repository_dispatch:
+    types: [generate_video_event]
+  # يمكن أيضاً استخدام هذا لتشغيل يدوي من واجهة GitHub
+  workflow_dispatch:
+    inputs:
+      ayah_text:
+        description: 'Ayah Text Content'
+        required: true
+      audio_url:
+        description: 'Reciter Audio URL (MP3)'
+        required: true
+      output_name:
+        description: 'Output Video Filename'
+        required: false
+        default: 'final_video.mp4'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    # تحديد مدخلات العمل عند التشغيل اليدوي (workflow_dispatch)
+    env:
+      INPUT_AYAH_TEXT: ${{ github.event.inputs.ayah_text || github.event.client_payload.ayah_text }}
+      INPUT_AUDIO_URL: ${{ github.event.inputs.audio_url || github.event.client_payload.audio_url }}
+      INPUT_OUTPUT_NAME: ${{ github.event.inputs.output_name || github.event.client_payload.output_name }}
+      
+    steps:
+      # 1. نسخ الكود من المستودع
+      - uses: actions/checkout@v4
+      
+      # 2. إعداد بيئة Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          
+      # 3. تثبيت FFmpeg (مهم جداً!)
+      - name: Install FFmpeg
+        run: sudo apt-get install -y ffmpeg
+        
+      # 4. تثبيت متطلبات Python (moviepy, requests, Pillow)
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      # 5. تشغيل كود توليد الفيديو
+      # يتم استخدام المتغيرات التي تم تمريرها من n8n
+      - name: Run Video Generator
+        id: run_script
+        run: python video_generator.py --text "${{ env.INPUT_AYAH_TEXT }}" --audio-url "${{ env.INPUT_AUDIO_URL }}" --output-name "${{ env.INPUT_OUTPUT_NAME }}"
+      
+      # 6. تحميل الفيديو النهائي كناتج للـ Workflow
+      - name: Upload Final Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-quran-video
+          path: output/${{ env.INPUT_OUTPUT_NAME }}
+          if-no-files-found: error
+          retention-days: 1 # يحتفظ به ليوم واحد فقط
+
+      # 7. (اختياري) نشر الفيديو على Google Drive / S3
+      # تتطلب هذه الخطوة إعداداً إضافياً، لكنها تضمن التلقائية الكاملة
+      - name: Echo Completion Status
+        run: echo "Video generation complete. Artifact uploaded successfully."
